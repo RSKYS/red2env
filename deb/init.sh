@@ -77,7 +77,12 @@ echo -e "\nneofetch\n" >> /mnt/etc/profile
 
 cat > /mnt/etc/default/locale <<LCL
 LANG=en_US.UTF-8
-LC_ALL=en_US.UTF-8
+
+LCL
+
+cat > /mnt/etc/locale.gen <<LCL
+en_GB.UTF-8 UTF-8
+en_US.UTF-8 UTF-8
 
 LCL
 
@@ -94,7 +99,8 @@ deb http://security.debian.org/debian-security/ bookworm-security contrib main n
 
 MGM
 
-ch_exec "locale-gen; \
+ch_exec "DEBIAN_FRONTEND=noninteractive \
+        dpkg-reconfigure locales; \
     apt update && \
     apt dist-upgrade --autoremove -y && \
     apt install -y linux-image-amd64 linux-headers-amd64 firmware-linux"
@@ -103,4 +109,4 @@ ch_exec "sed -i '/etc/default/grub' -e 's/=5/=0/'; \
     grub-install --force --removable && \
     grub-mkconfig -o /boot/grub/grub.cfg"
 
-ch_exec "passwd; bash"
+ch_exec "passwd"
