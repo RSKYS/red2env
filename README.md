@@ -1,8 +1,11 @@
 # Red2Env
 
 ### Todo:
-- [ ] Finish Debian script
+- [ ] Finish Debian script (Proper partition detect)
 - [x] init.nix for NixOS
+- [ ] Finish NixOS scripts (Almost same issue)
+- [ ] init.nix for Debian
+- [ ] Finish Debian script (Almost same issue)
 - [ ] Slackserv script
 - [ ] All in one overwrite program
 - [ ] Improvements for init.nix (let vars, merge init.nix, etc)
@@ -13,7 +16,7 @@ NixOS requirement should only become need for Nix.
 
 Run the following command as root #:
 ```
-curl https://raw.githubusercontent.com/RSKYS/red2env/master/nix/init.nix | nix-build
+curl https://raw.githubusercontent.com/RSKYS/red2env/master/nix/init.nix > init.nix; nix-shell init.nix --impure
 ```
 
 ## Debian

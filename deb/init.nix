@@ -47,10 +47,10 @@ export MIRROR="${toString Mirror}"
 export PORT="${toString Port}"
 
 echo 'y' | mkfs.fat -F 32 /dev/sda1
-echo 'y' | mkfs.ext4 /dev/sda3
-mkswap /dev/sda2
+echo 'y' | mkfs.ext4 /dev/sda2
+mkswap /dev/sda3
 
-mount /dev/sda3 /mnt
+mount /dev/sda2 /mnt
 mkdir -p /mnt/boot/efi
 mount /dev/sda1 /mnt/boot/efi
 
@@ -63,18 +63,18 @@ PasswordAuthentication yes
 SSH
 
 debootstrap --arch amd64 \
-    --include=sudo,dbus,locales,vim,wget,ca-certificates,curl,systemd-timesyncd,neofetch,zstd,parted,cron,dosfstools,git,openssh-server,build-essential,python3-venv,python3-pip,grub-efi-amd64,open-vm-tools \
+    --include=sudo,bash,dbus,locales,vim,wget,ca-certificates,curl,systemd-timesyncd,neofetch,zstd,parted,cron,dosfstools,git,openssh-server,build-essential,python3-venv,python3-pip,grub-efi-amd64,open-vm-tools \
         bookworm /mnt $MIRROR/debian
 
 mount --rbind /dev /mnt/dev
 mount --rbind /sys /mnt/sys
 mount --rbind /proc /mnt/proc
 mount --rbind /tmp /mnt/tmp
-swapon /dev/sda2
+swapon /dev/sda3
 
 #genfstab -U /mnt > /mnt/etc/fstab
 cp -rf /etc/network/interfaces /mnt/etc/network/
-echo -e "\nneofetch\n" >> /mnt/etc/profile
+echo "\nneofetch\n" >> /mnt/etc/profile
 
 cat > /mnt/etc/default/locale <<LCL
 LANG=en_US.UTF-8

@@ -29,10 +29,10 @@ pkgs.writeShellScriptBin "init-nixos" ''
   echo 'y' | mkfs.ext4 /dev/sda3
   mkswap /dev/sda2
 
-  mount /dev/sda3 /mnt
+  mount /dev/sda2 /mnt
   mkdir -p /mnt/boot/efi
   mount /dev/sda1 /mnt/boot/efi
-  swapon /dev/sda2
+  swapon /dev/sda3
 
   nixos-generate-config --root /mnt
 
