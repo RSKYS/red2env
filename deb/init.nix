@@ -25,14 +25,14 @@ in
 pkgs.mkShell {
   name = "isolated-environment";
   buildInputs = [
-    pkgs.git
-    pkgs.python3Packages.pip
+    #pkgs.git
+    #pkgs.python3Packages.pip
     pkgs.debootstrap
     pkgs.util-linux
+    pkgs.bash
   ];
 
   shellHook = ''
-#!/bin/bash
 
 if [ $(id -u) != "0" ]; then
 	echo "Script needs to run under superuser."
