@@ -16,8 +16,10 @@
 # GNU General Public License at <http://www.gnu.org/licenses/> for
 # more details.
 
-# General Variables
-MIRROR="http://mirror.ox.ac.uk"
+# WARNING: This script destroys existing data on the chosen drive.
+
+VERSION="trixie"
+MIRROR="http://mirror.rackspace.com"
 PORT="22"
 
 #Check user privilege
@@ -30,28 +32,104 @@ ch_exec() {
 	chroot '/mnt' /bin/bash -c "$*"
 }
 
-#dhclient
 apt update
-apt install dosfstools debootstrap arch-install-scripts -y
+apt install parted dosfstools debootstrap arch-install-scripts -y
 
-set -e
+set -euo pipefail
 
-echo 'y' | mkfs.fat -F 32 /dev/sda1
-echo 'y' | mkfs.ext4 /dev/sda2
-mkswap /dev/sda3
+err() { printf '%s\n' "$*" >&2; }
 
-mount /dev/sda3 /mnt
+# Messing with disk here.. fuuuck.
+
+for cmd in parted blockdev; do
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    err "$cmd not found. Were you connected to internet?"
+    exit 1
+  fi
+done
+
+read -r -p "Enter target disk (e.g /dev/sdX, /dev/nvme0n1): " DISK
+DISK="${DISK:-}"
+
+if [ -z "$DISK" ]; then
+  err "No disk drive provided.. Exiting."
+  exit 1
+fi
+
+if [ ! -b "$DISK" ]; then
+  err "Device '$DISK' does not exist or not a block device."
+  exit 1
+fi
+
+TOTAL_BYTES=$(blockdev --getsize64 "$DISK")
+TOTAL_MIB=$(( TOTAL_BYTES / 1024 / 1024 ))
+
+if [ "$TOTAL_MIB" -lt 10240 ]; then
+  err "Drive size appears extremely small.. Aborting."
+  exit 1
+fi
+
+DISK1_START=1
+DISK1_END=513
+
+LEAVE_END="${LEAVE_END:-1024}"
+read -r -p "Enter size for SWAP in MB [default 1024]: " LEAVE_END
+
+DISK2_START=$DISK1_END
+DISK2_END=$(( TOTAL_MIB - LEAVE_END ))
+DISK3_START=$DISK2_END
+
+# Final sanity checks
+if [ "$DISK2_END" -le "$DISK2_START" ]; then
+  err "Computed ${DISK}2 end ($DISK2_END MiB) is <= ${DISK}disk2 start ($DISK2_START MiB). Aborting."
+  exit 1
+fi
+
+while true; do
+    read -r -p "Shall I proceed? (y/N): " CONFIRM
+    CONFIRM=$(printf '%s' "$CONFIRM" | tr '[:upper:]' '[:lower:]')
+
+    if [ -z "$CONFIRM" ]; then
+        CONFIRM="n"
+    fi
+
+    case "$CONFIRM" in
+    y|yes)
+        echo "Proceeding..."
+        unset CONFIRM
+        break
+        ;;
+    n|no)
+        echo "Aborted by user."
+        exit 0
+        ;;
+    *)
+        echo "Invalid input. y/N?"
+        ;;
+    esac
+done
+
+
+unset CONFIRM
+echo "Writing GPT and creating partitions..."
+
+parted -s "$DISK" mklabel gpt
+parted -s "$DISK" unit mib mkpart primary ${DISK1_START} ${DISK1_END}
+unset DISK1_START DISK1_END
+
+parted -s "$DISK" unit mib mkpart primary ${DISK2_START} ${DISK2_END}
+unset DISK2_START DISK2_END
+
+parted -s "$DISK" unit mib mkpart primary ${DISK3_START} 100%
+unset DISK3_START
+
+echo 'y' | mkfs.fat -F 32 -n EFI "${DISK}1"
+echo 'y' | mkfs.ext4 "${DISK}2"
+mkswap "${DISK}3"
+
+mount "${DISK}2" /mnt
 mkdir -p /mnt/boot/efi
-mount /dev/sda1 /mnt/boot/efi
-
-# wget $(python3 -c "import requests, re; \
-#         url = 'http://archive.debian.org/debian/pool/main/d/debootstrap/'; \
-#         response = requests.get(url); \
-#         match = re.search(r'href=\"(debootstrap_[^\"]+\.deb)\"', response.text); \
-#         print(url + match.group(1))")
-
-# dpkg -i debootstrap*.deb
-# rm -rf debootstrap*.deb
+mount "${DISK}1" /mnt/boot/efi
 
 mkdir -p /mnt/etc/ssh/sshd_config.d
 cat > "/mnt/etc/ssh/sshd_config.d/50-Debian.conf" <<SSH
@@ -60,10 +138,11 @@ PermitRootLogin yes
 PasswordAuthentication yes
 
 SSH
+unset DISK PORT
 
 debootstrap --arch amd64 \
     --include=sudo,bash,dbus,locales,vim,wget,ca-certificates,curl,systemd-timesyncd,neofetch,zstd,parted,cron,dosfstools,git,openssh-server,build-essential,python3-venv,python3-pip,grub-efi-amd64,open-vm-tools \
-        bookworm /mnt $MIRROR/debian
+        $VERSION /mnt $MIRROR/debian
 
 mount --rbind /dev /mnt/dev
 mount --rbind /sys /mnt/sys
@@ -87,17 +166,18 @@ en_US.UTF-8 UTF-8
 LCL
 
 cat > /mnt/etc/apt/sources.list <<MGM
-deb $MIRROR/debian/ bookworm contrib main non-free non-free-firmware
+deb $MIRROR/debian/ ${VERSION} contrib main non-free non-free-firmware
 
-deb $MIRROR/debian/ bookworm-updates contrib main non-free non-free-firmware
+deb $MIRROR/debian/ ${VERSION}-updates contrib main non-free non-free-firmware
 
-deb $MIRROR/debian/ bookworm-proposed-updates contrib main non-free non-free-firmware
+deb $MIRROR/debian/ ${VERSION}-proposed-updates contrib main non-free non-free-firmware
 
-deb $MIRROR/debian/ bookworm-backports contrib main non-free non-free-firmware
+deb $MIRROR/debian/ ${VERSION}-backports contrib main non-free non-free-firmware
 
-deb http://security.debian.org/debian-security/ bookworm-security contrib main non-free non-free-firmware
+deb $MIRROR/debian-security/ ${VERSION}-security contrib main non-free non-free-firmware
 
 MGM
+unset MIRROR VERSION
 
 ch_exec "DEBIAN_FRONTEND=noninteractive \
         dpkg-reconfigure locales; \
