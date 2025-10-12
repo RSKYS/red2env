@@ -16,11 +16,12 @@
 # GNU General Public License at <http://www.gnu.org/licenses/> for
 # more details.
 
-# WARNING: This script destroys existing data on the chosen drive.
+# WARNING: The script destroys existing data on the chosen drive.
+# This script only supports EFI.
 
-VERSION="trixie"
 MIRROR="http://mirror.rackspace.com"
-PORT="22"
+PORT=${PORT:-22}
+VERSION=${VERSION:-bookworm}
 
 #Check user privilege
 if [ $(id -u) != "0" ]; then
@@ -33,7 +34,7 @@ ch_exec() {
 }
 
 apt update
-apt install parted dosfstools debootstrap arch-install-scripts -y
+apt install arch-install-scripts debootstrap dosfstools gdisk parted -y
 
 set -euo pipefail
 
@@ -49,7 +50,6 @@ for cmd in parted blockdev; do
 done
 
 read -r -p "Enter target disk (e.g /dev/sdX, /dev/nvme0n1): " DISK
-DISK="${DISK:-}"
 
 if [ -z "$DISK" ]; then
   err "No disk drive provided.. Exiting."
@@ -70,7 +70,7 @@ if [ "$TOTAL_MIB" -lt 10240 ]; then
 fi
 
 DISK1_START=1
-DISK1_END=513
+DISK1_END=257
 
 LEAVE_END="${LEAVE_END:-1024}"
 read -r -p "Enter size for SWAP in MB [default 1024]: " LEAVE_END
@@ -78,6 +78,7 @@ read -r -p "Enter size for SWAP in MB [default 1024]: " LEAVE_END
 DISK2_START=$DISK1_END
 DISK2_END=$(( TOTAL_MIB - LEAVE_END ))
 DISK3_START=$DISK2_END
+unset LEAVE_END
 
 # Final sanity checks
 if [ "$DISK2_END" -le "$DISK2_START" ]; then
@@ -113,17 +114,36 @@ done
 unset CONFIRM
 echo "Writing GPT and creating partitions..."
 
+MOUNTED=$(lsblk -nr -o NAME,MOUNTPOINT "$DISK" | awk '$2!="" {print $1}')
+if [ -n "$MOUNTED" ]; then
+  echo "Attempting to unmount the in use drive..."
+  for DPART in $MOUNTED; do
+    [ -z "$DPART" ] && continue
+    sudo umount -l "/dev/$DPART" || {
+      echo -e "Failed to unmount /dev/$DPART..\n\
+You probably need to do it manually."
+      unset MOUNTED DPART
+      exit 1
+    }
+  done
+  unset DPART
+fi
+unset MOUNTED
+
 parted -s "$DISK" mklabel gpt
 parted -s "$DISK" unit mib mkpart primary ${DISK1_START} ${DISK1_END}
+sgdisk --typecode=1:EF00 "$DISK"
 unset DISK1_START DISK1_END
 
 parted -s "$DISK" unit mib mkpart primary ${DISK2_START} ${DISK2_END}
+sgdisk --typecode=2:8300 "$DISK"
 unset DISK2_START DISK2_END
 
 parted -s "$DISK" unit mib mkpart primary ${DISK3_START} 100%
+sgdisk --typecode=3:8200 "$DISK"
 unset DISK3_START
 
-echo 'y' | mkfs.fat -F 32 -n EFI "${DISK}1"
+echo 'y' | mkfs.fat -F 32 "${DISK}1"
 echo 'y' | mkfs.ext4 "${DISK}2"
 mkswap "${DISK}3"
 
@@ -182,11 +202,13 @@ unset MIRROR VERSION
 ch_exec "DEBIAN_FRONTEND=noninteractive \
         dpkg-reconfigure locales; \
     apt update && \
-    apt dist-upgrade --autoremove -y && \
+    apt dist-upgrade --auto-remove -y && \
     apt install -y linux-image-amd64 linux-headers-amd64 firmware-linux"
 
 ch_exec "sed -i '/etc/default/grub' -e 's/=5/=0/'; \
-    grub-install --force --removable && \
+    grub-install --force --removable \
+      --target=x86_64-efi \
+      --efi-directory=/boot/efi && \
     grub-mkconfig -o /boot/grub/grub.cfg"
 
 ch_exec "passwd"
