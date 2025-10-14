@@ -40,7 +40,7 @@ set -euo pipefail
 
 err() { printf '%s\n' "$*" >&2; }
 
-# Messing with disk here.. fuuuck.
+# Prompt and calculate:
 
 for cmd in parted blockdev; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
@@ -110,9 +110,10 @@ while true; do
     esac
 done
 
-
 unset CONFIRM
 echo "Writing GPT and creating partitions..."
+
+# Begin the actual disk terraforming:
 
 MOUNTED=$(lsblk -nr -o NAME,MOUNTPOINT "$DISK" | awk '$2!="" {print $1}')
 if [ -n "$MOUNTED" ]; then
@@ -161,7 +162,7 @@ SSH
 unset DISK PORT
 
 debootstrap --arch amd64 \
-    --include=sudo,bash,dbus,locales,vim,wget,ca-certificates,curl,systemd-timesyncd,neofetch,zstd,parted,cron,dosfstools,git,openssh-server,build-essential,python3-venv,python3-pip,grub-efi-amd64,open-vm-tools \
+    --include=sudo,bash,dbus,locales,vim,wget,ca-certificates,curl,systemd-timesyncd,zstd,parted,cron,dosfstools,git,openssh-server,build-essential,python3-venv,python3-pip,grub-efi-amd64,open-vm-tools \
         $VERSION /mnt $MIRROR/debian
 
 mount --rbind /dev /mnt/dev
@@ -172,7 +173,6 @@ swapon /dev/sda3
 
 genfstab -U /mnt > /mnt/etc/fstab
 cp -rf /etc/network/interfaces /mnt/etc/network/
-echo "\nneofetch\n" >> /mnt/etc/profile
 
 cat > /mnt/etc/default/locale <<LCL
 LANG=en_US.UTF-8
@@ -199,11 +199,68 @@ deb $MIRROR/debian-security/ ${VERSION}-security contrib main non-free non-free-
 MGM
 unset MIRROR VERSION
 
+# Who said you couldn't replace Ubuntu..?
+ch_exec "DEBIAN_FRONTEND=noninteractive \
+        apt install -y --no-install-recommends --no-install-suggests \
+    adwaita-icon-theme appstream apt-file at-spi2-core bash-completion bc \
+    bcache-tools bolt btrfs-progs byobu command-not-found console-setup \
+    cryptsetup cryptsetup-initramfs dbus-user-session dconf-gsettings-backend \
+    distro-info e2fsprogs-l10n eatmydata ed efibootmgr eject ethtool exfatprogs \
+    file fonts-dejavu-core friendly-recovery ftp gdisk gir1.2-packagekitglib-1.0 \
+    gnome-keyring gnome-keyring-pkcs11 gnupg-l10n gpg-wks-client gpg-wks-server \
+    gtk-update-icon-cache hdparm hicolor-icon-theme htop inetutils-telnet info \
+    iptables iputils-tracepath irqbalance jq krb5-locales libaio1 libappstream4 \
+    libarchive13 libatasmart4 libatk-bridge2.0-0 libatk1.0-0 libatm1 libatspi2.0-0 \
+    libavahi-client3 libavahi-common-data libblockdev-crypto2 libblockdev-fs2 \
+    libblockdev-loop2 libblockdev-part-err2 libblockdev-part2 libblockdev-swap2 \
+    libblockdev-utils2 libblockdev2 libcolord2 libcups2 libduktape207 libdw1 \
+    libepoxy0 libevent-2.1-7 libevent-core-2.1-7 libfile-find-rule-perl \
+    libflashrom1 libfstrm0 libfwupd2 libgcab-1.0-0 libgcr-ui-3-1 \
+    libgdk-pixbuf2.0-bin libglib2.0-bin libgnutls-dane0 libgpg-error-l10n \
+    libgstreamer1.0-0 libgtk-3-0 libgtk-3-bin libgtk-3-common libgusb2 \
+    libidn12 libintl-xs-perl libisns0 libjaylink0 libjemalloc2 libjim0.81 \
+    libjpeg62-turbo libldap-common liblockfile1 liblognorm5 liblvm2cmd2.03 \
+    libmagic-mgc libmagic1 libmbim-utils libmodule-find-perl \
+    libmodule-scandeps-perl libnetplan0 libnpth0 libntfs-3g89 libopeniscsiusr \
+    libpam-cap libpam-gnome-keyring libparted-fs-resize0 libpcap0.8 \
+    libpolkit-agent-1-0 libproc-processtable-perl libprotobuf-c1 libpython3.11 \
+    libqmi-utils librsvg2-2 librsvg2-common libsasl2-modules libsmbios-c2 \
+    libsort-naturally-perl libssh-4 libstemmer0d libterm-readkey-perl \
+    libtss2-esys-3.0.2-0 libtss2-mu0 libtss2-sys1 libtss2-tcti-cmd0 \
+    libtss2-tcti-device0 libtss2-tcti-mssim0 libtss2-tcti-swtpm0 \
+    libudisks2-0 libunbound8 liburcu8 libuv1 libvolume-key1 libwayland-cursor0 \
+    libwayland-egl1 libxcomposite1 libxcursor1 libxdamage1 libxi6 libxinerama1 \
+    libxmlb2 libxrandr2 lshw lsof lvm2 man-db manpages mdadm modemmanager mokutil \
+    mtr-tiny multipath-tools ncurses-term netcat-openbsd networkd-dispatcher \
+    ntfs-3g open-iscsi os-prober overlayroot p11-kit packagekit-tools pastebinit \
+    pinentry-curses pinentry-gnome3 plymouth pollinate powermgmt-base psmisc \
+    publicsuffix python3-automat python3-babel python3-bcrypt python3-cffi-backend \
+    python3-charset-normalizer python3-click python3-constantly python3-debian \
+    python3-gdbm python3-hamcrest python3-hyperlink python3-incremental \
+    python3-jaraco.classes python3-keyring python3-lazr.restfulclient \
+    python3-openssl python3-rfc3987 python3-rich python3-secretstorage \
+    python3-service-identity python3-six python3-software-properties \
+    python3-systemd python3-twisted python3-uritemplate python3-webcolors \
+    python3-zipp python3-zope.interface rsync rsyslog sbsigntool screen sg3-utils \
+    software-properties-common sosreport squashfs-tools ssh-import-id strace tcpdump \
+    telnet thermald thin-provisioning-tools time tpm-udev udisks2 upower \
+    usb-modeswitch usb.ids usbutils usrmerge uuid-runtime wireless-regdb xauth \
+    xdg-user-dirs xfsprogs xml-core zerofree"
+
+# A bit of finishing touch
 ch_exec "DEBIAN_FRONTEND=noninteractive \
         dpkg-reconfigure locales; \
     apt update && \
     apt dist-upgrade --auto-remove -y && \
     apt install -y linux-image-amd64 linux-headers-amd64 firmware-linux"
+
+if [ "$(cat /mnt/etc/debian_version)" -ge 13 ]; then
+  ch_exec "apt install -y fastfetch"
+  echo "\nfastfetch\n" >> /mnt/etc/profile
+else
+  ch_exec "apt install -y neofetch"
+  echo "\nneofetch\n" >> /mnt/etc/profile
+fi
 
 ch_exec "sed -i '/etc/default/grub' -e 's/=5/=0/'; \
     grub-install --force --removable \
